@@ -7,13 +7,11 @@ from fastapi.responses import HTMLResponse
 from PIL import Image
 from pydantic import BaseModel
 
-app = FastAPI(title="NiftyLens AI")
+app = FastAPI(title="NiftyLens AI Pro")
 
-# Password Hashing Helper (100% Reliable, Zero Dependency Crash)
 def hash_password(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
-# Database Setup
 def init_db():
     conn = sqlite3.connect("users.db")
     c = conn.cursor()
@@ -92,38 +90,56 @@ async def analyze(
         client = genai.Client(api_key=api_key)
         
         image_bytes = await file.read()
-        image = Image.open(io.BytesIO(image_bytes))
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
         system_prompt = f"""
-        Aap ek professional Technical Chart Analyst hain Indian Stock Market (NSE/BSE/Nifty) ke liye.
-        User sawal: {prompt if prompt else 'Is chart ka analysis karke Entry, SL aur Target batao.'}
+        Aap ek Elite Indian Stock Market Quantitative & Technical Analyst hain (NSE/BSE/Nifty/BankNifty).
+        User Sawal: {prompt if prompt else 'Pichle 1 Mahine, 1 Hafte aur Live chart ke hisab se exact Buy/Sell prediction do.'}
 
-        Chart ke right side Y-axis par jo ASLI PRICE dikh rahi hai sirf wahi price read karein aur response de:
-        1. SYMBOL & TIMEFRAME: (Stock/Index ka naam aur timeframe)
-        2. TREND: (Bullish / Bearish / Sideways)
-        3. KEY SUPPORT & RESISTANCE: (Y-axis ke hisab se exact numbers)
-        4. BUY SETUP: (Entry level, Stop-Loss, Target 1 aur Target 2)
-        5. SELL/PUT SETUP: (Breakdown entry, Stop-Loss, Target)
-        6. REASONING & DISCLAIMER: (Kyu yeh trade ban raha hai)
+        Is chart ko scan karke Y-axis ke real numbers ke hisab se niche diye format me ek professional report banayein:
+
+        📅 1. PAST 1 MONTH MACRO CONTEXT:
+        - Monthly High / Low range jo chart me detect ho rahi hai.
+        - Overall monthly structure: (Uptrend / Downtrend / Consolidation).
+
+        📊 2. PAST 1 WEEK MOMENTUM:
+        - Pichle 1 hafte ke swings (Higher Highs ya Lower Lows).
+        - Major Breakdown ya Reversal zone.
+
+        ⚡ 3. LIVE INTRADAY PRICE ACTION (Current Price):
+        - Current Market Price (CMP) jo right side Y-axis par dikh rahi hai.
+        - Candlestick pattern (Rejection wick, breakout candle, consolidation).
+
+        🎯 4. ACTIONABLE TRADE PREDICTION:
+        - 🟢 SAFE BUY ENTRY: (Exact price jiske upar green candle close par buy banta hai)
+        - 🔴 SAFE SELL/SHORT ENTRY: (Exact price jiske niche breakdown par sell/put banta hai)
+        - 🛑 STRICT STOP LOSS (SL): (Both sides ke liye risk management)
+        - 🏁 TARGET 1 (Scalp):
+        - 🏁 TARGET 2 (Positional / Swing):
+        - ⚖️ RISK-TO-REWARD RATIO: (e.g. 1:2 ya 1:2.5)
+
+        ⚠️ 5. RISK DISCLAIMER:
+        - "Technical observation for educational research. Follow strict stop-loss."
         """
 
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[system_prompt, image]
-        )
-        return {"analysis": response.text}
+        models_to_try = ["gemini-2.0-flash", "gemini-flash-latest", "gemini-2.5-flash"]
+        last_error = None
+        for model_name in models_to_try:
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=[image, system_prompt]
+                )
+                if response and response.text:
+                    return {"analysis": response.text}
+            except Exception as ex:
+                last_error = ex
+                continue
 
-    except Exception:
-        try:
-            from google import genai
-            client = genai.Client(api_key=api_key)
-            response = client.models.generate_content(
-                model="gemini-1.5-flash",
-                contents=[system_prompt, image]
-            )
-            return {"analysis": response.text}
-        except Exception as err:
-            raise HTTPException(status_code=500, detail=f"AI Error: {str(err)}")
+        raise HTTPException(status_code=500, detail=f"Model Error: {str(last_error)}")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI Error: {str(e)}")
 
 @app.get("/", response_class=HTMLResponse)
 def home():
@@ -133,7 +149,7 @@ def home():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>NiftyLens AI Analyst</title>
+        <title>NiftyLens AI Pro</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     </head>
@@ -142,7 +158,7 @@ def home():
             <div class="flex justify-between items-center py-3 border-b border-slate-800">
                 <div class="flex items-center space-x-2">
                     <i class="fa-solid fa-chart-pie text-emerald-400 text-2xl"></i>
-                    <h1 class="text-xl font-bold tracking-wider">NiftyLens AI</h1>
+                    <h1 class="text-xl font-bold tracking-wider">NiftyLens AI Pro</h1>
                 </div>
                 <button id="logoutBtn" onclick="logout()" class="hidden text-xs bg-red-500/20 text-red-400 px-3 py-1.5 rounded-lg">Logout</button>
             </div>
@@ -198,24 +214,24 @@ def home():
                 </div>
 
                 <div>
-                    <label class="text-xs text-slate-400">Aapka Sawal / Prompt</label>
-                    <input id="promptInput" type="text" class="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 mt-1 text-sm text-white" placeholder="e.g. Abhi Buy karein ya Sell? Target aur Stop Loss kya hoga?">
+                    <label class="text-xs text-slate-400">Aapka Sawal / Analysis Prompt</label>
+                    <input id="promptInput" type="text" class="w-full bg-slate-900 border border-slate-800 rounded-xl p-3 mt-1 text-sm text-white" placeholder="e.g. Pichle 1 mahine aur 1 hafte ke hisab se prediction do">
                 </div>
 
                 <button id="anBtn" onclick="analyzeChart()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-3.5 rounded-xl shadow-lg transition">
-                    <i class="fa-solid fa-wand-magic-sparkles mr-2"></i> Analyze Chart
+                    <i class="fa-solid fa-wand-magic-sparkles mr-2"></i> 1-Month + 1-Week Deep Prediction
                 </button>
 
                 <div id="resBox" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-4 mt-2">
                     <h3 class="text-sm font-bold text-emerald-400 border-b border-slate-800 pb-2 flex items-center">
-                        <i class="fa-solid fa-bolt mr-2"></i> Real AI Technical Prediction
+                        <i class="fa-solid fa-brain mr-2"></i> Deep Multi-Timeframe Prediction
                     </h3>
                     <div id="resText" class="mt-3 text-xs leading-relaxed text-slate-200 whitespace-pre-wrap"></div>
                 </div>
             </div>
 
             <div class="text-center py-2 text-[10px] text-slate-600">
-                NiftyLens AI &bull; For Technical & Educational Use Only
+                NiftyLens AI Pro &bull; Advanced Technical Analysis
             </div>
         </div>
 
@@ -329,7 +345,7 @@ def home():
 
                 const btn = document.getElementById('anBtn');
                 btn.disabled = true;
-                btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> Analyzing Chart...`;
+                btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin mr-2"></i> Analyzing 1M + 1W Data...`;
 
                 const fd = new FormData();
                 fd.append('file', fi.files[0]);
@@ -345,7 +361,7 @@ def home():
                 } catch(e){ alert("Error: "+e.message); }
                 finally {
                     btn.disabled = false;
-                    btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles mr-2"></i> Analyze Chart`;
+                    btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles mr-2"></i> 1-Month + 1-Week Deep Prediction`;
                 }
             }
 
