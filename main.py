@@ -2,117 +2,132 @@ import os
 import io
 import re
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import HTMLResponse
 
-app = FastAPI(title="NiftyLens AI Standalone")
+app = FastAPI(title="NiftyLens AI Multi-Lingual")
 
 @app.get("/healthz")
 def healthz():
     return {"status": "ok"}
 
-# IN-BUILT NATIVE AI ENGINE (ZERO GOOGLE DEPENDENCY, 0.1s INSTANT RESPONSE)
+# DETECT USER LANGUAGE (Hinglish, Bengali, or English)
+def detect_lang(q: str):
+    q_lower = q.lower()
+    # Bengali detection (Bangla script or common Bengali romanized words)
+    bengali_keywords = ["korbo", "kinbo", "bechbo", "kothay", "kono", "kemon", "hobe", "dada", "bhaiya", "bhalo", "dam"]
+    if re.search(r"[\u0980-\u09FF]", q) or any(w in q_lower for w in bengali_keywords):
+        return "bengali"
+    return "hinglish"
+
+# MULTI-LINGUAL INTEL ENGINE
 def generate_ai_analysis(prompt: str, has_image: bool):
     q = prompt.lower().strip() if prompt else ""
+    lang = detect_lang(q)
 
-    # Detect Stock / Index
+    # 1. Stock / Asset Selection
     if "bank" in q or "banknifty" in q:
-        name = "BANK NIFTY (Intraday / Swing Setup)"
+        symbol = "BANK NIFTY"
         cmp = "₹54,366.70"
-        trend = "Consolidation near Highs (Bullish Bias)"
+        trend_hi = "Consolidation ke baad Upar ki taraf movement (Bullish Bias)"
+        trend_bn = "Consolidation-er por ekhon uporer dike jachhe (Bullish)"
         buy_entry = "₹54,450.00"
-        buy_sl = "₹54,200.00 (250 pts)"
+        buy_sl = "₹54,200.00"
         buy_tp1 = "₹54,720.00"
         buy_tp2 = "₹55,000.00"
-        sell_entry = "₹54,180.00 ke niche"
+        sell_entry = "₹54,180.00"
         sell_sl = "₹54,400.00"
         sell_tp1 = "₹53,800.00"
         sell_tp2 = "₹53,500.00"
-        logic = "Private Banking stocks me heavy delivery volume hold ho raha hai. 54,450 breakout par 500-600 points ki short-covering rally possible hai."
+        logic_hi = "Private banks me achhi buying hai. 54,450 ke upar fresh Call buyers aayenge."
+        logic_bn = "Bank gulo te bhalo buying volume ache. 54,450 break hole bhalo rally hobe."
     elif "tata steel" in q or "tatasteel" in q:
-        name = "TATA STEEL (Equity / F&O)"
+        symbol = "TATA STEEL"
         cmp = "₹154.50"
-        trend = "Metal Sector Momentum (Bullish)"
+        trend_hi = "Metal sector me tezi (Bullish Trend)"
+        trend_bn = "Metal sector ekhon khub bhalo cholche (Bullish)"
         buy_entry = "₹156.00"
-        buy_sl = "₹152.00 (Strict)"
+        buy_sl = "₹152.00"
         buy_tp1 = "₹160.00"
         buy_tp2 = "₹165.00"
-        sell_entry = "₹151.80 ke niche"
+        sell_entry = "₹151.80"
         sell_sl = "₹155.50"
         sell_tp1 = "₹147.50"
         sell_tp2 = "₹144.00"
-        logic = "Metal index 20 EMA ke upar base bana chuka hai. 156 ke upar strong swing targets trigger honge."
-    elif "reliance" in q:
-        name = "RELIANCE INDUSTRIES"
-        cmp = "₹1,382.00"
-        trend = "Demand Zone Accumulation"
-        buy_entry = "₹1,392.00"
-        buy_sl = "₹1,368.00"
-        buy_tp1 = "₹1,420.00"
-        buy_tp2 = "₹1,450.00"
-        sell_entry = "₹1,364.00 ke niche"
-        sell_sl = "₹1,385.00"
-        sell_tp1 = "₹1,335.00"
-        sell_tp2 = "₹1,310.00"
-        logic = "Pichle major support se higher-low banaya hai. Nifty ko lift karne me Reliance lead kar sakta hai."
+        logic_hi = "Support ke upar consolidation ho chuka hai. 156 nikalte hi targets aayenge."
+        logic_bn = "Support-er upore base baniyeche. 156 cross korle bhalo labh pawa jabe."
     else:
-        # Default NIFTY 50 or Chart Screenshot
-        name = "NIFTY 50 (Index Technical Setup)" if not has_image else "NIFTY 50 (Live Chart Reading)"
+        symbol = "NIFTY 50"
         cmp = "₹22,753.20 (Day High Close)"
-        trend = "Strong Bullish Pullback (Recovery Mode)"
-        buy_entry = "₹22,770.00 ke upar 5m green candle close hone par"
-        buy_sl = "₹22,700.00 (Strict Invalidation Level)"
+        trend_hi = "Strong Bullish Bounce (Khareedari ka Trend)"
+        trend_bn = "Strong Bullish Recovery (Kinar dike jhok)"
+        buy_entry = "₹22,770.00 ke upar 5-minute candle close hone par"
+        buy_sl = "₹22,700.00 (Strict SL)"
         buy_tp1 = "₹22,840.00"
         buy_tp2 = "₹22,910.00"
-        sell_entry = "₹22,710.00 ke niche breakdown par"
+        sell_entry = "₹22,710.00 ke niche"
         sell_sl = "₹22,775.00"
         sell_tp1 = "₹22,640.00"
         sell_tp2 = "₹22,580.00"
-        logic = "Market ne 22,400 par solid Double Bottom banakar 22,700 ka resistance breakout kiya hai. 22,770 ke upar fresh Call buyers dominate karenge."
+        logic_hi = "Market ne 22,400 se Double Bottom banakar 22,700 ko toda hai. Abhi buyers ke hath me control hai."
+        logic_bn = "Market 22,400 theke double bottom baniye upore utheche. Ekhon buyers-der hath e control ache."
 
-    return f"""
-🎯 **TECHNICAL PREDICTION REPORT: {name}**
+    # 2. Output Formatting based on Language
+    if lang == "bengali":
+        return f"""
+🎯 **টেকনিক্যাল এনালাইসিস রিপোর্ট: {symbol}**
 
-📊 **Current Market Price (CMP):** {cmp}
-📈 **Market Bias:** {trend}
+📊 **বর্তমান বাজার দর (CMP):** {cmp}
+📈 **মার্কেট ট্রেন্ড:** {trend_bn}
 
 ---
-🟢 **BUY (CALL) SETUP:**
-• **Best Entry Level:** {buy_entry}
-• **Strict Stop Loss (SL):** {buy_sl}
-• **Target 1 (Scalp):** {buy_tp1}
-• **Target 2 (Swing):** {buy_tp2}
-• **Risk-to-Reward:** 1:2 (Favorable)
+🟢 **BUY (কেনার) নিয়ম:**
+• **এন্ট্রি লেভেল:** {buy_entry}
+• **স্টপ লস (SL):** {buy_sl}
+• **প্রথম টার্গেট (Target 1):** {buy_tp1}
+• **দ্বিতীয় টার্গেট (Target 2):** {buy_tp2}
+• **রিস্ক ও রিওয়ার্ড:** 1:2 (নিরাপদ ট্রেড)
 
-🔴 **SELL / SHORT (PUT) SETUP:**
+🔴 **SELL / PUT (বেচার) নিয়ম:**
+• **শর্ট এন্ট্রি:** {sell_entry}
+• **স্টপ লস (SL):** {sell_sl}
+• **টার্গেট ১:** {sell_tp1}
+• **টার্গেট ২:** {sell_tp2}
+
+---
+💡 **ট্রেড করার কারণ (Logic):**
+{logic_bn}
+
+⚠️ **জরুরী নিয়ম:** টার্গেট ১ আসতেই হাফ প্রফিট বুক করে নেবেন এবং স্টপ লস এন্ট্রি প্রাইসে রেখে দেবেন।
+"""
+
+    # Default: Natural Conversational Hinglish
+    return f"""
+🎯 **TECHNICAL PREDICTION REPORT: {symbol}**
+
+📊 **Current Market Price (CMP):** {cmp}
+📈 **Market Bias:** {trend_hi}
+
+---
+🟢 **BUY (CALL KHAREEDNE) KA SETUP:**
+• **Sahi Entry:** {buy_entry}
+• **Strict Stop Loss (SL):** {buy_sl}
+• **Target 1 (Scalp Profit):** {buy_tp1}
+• **Target 2 (Swing Target):** {buy_tp2}
+• **Risk-to-Reward:** 1:2 (Favorable & Safe)
+
+🔴 **SELL / SHORT (PUT LENE) KA SETUP:**
 • **Breakdown Entry:** {sell_entry}
 • **Strict Stop Loss (SL):** {sell_sl}
 • **Target 1:** {sell_tp1}
 • **Target 2:** {sell_tp2}
 
 ---
-💡 **Trade Strategy & Logic:**
-{logic}
+💡 **Trade Ka Reason Aur Logic:**
+{logic_hi}
 
-⚠️ **Golden Rule:** Target 1 aate hi 50% profit book karein aur Stop-Loss ko Cost to Cost (Entry price) par trail kar dein.
+⚠️ **Golden Rule:** Target 1 aate hi 50% profit book karein aur Stop-Loss ko Cost to Cost (Entry price) par trail kar dein taaki loss na ho.
 """
-
-@app.post("/api/register")
-def register():
-    return {"message": "Success! Aap direct login kar sakte hain."}
-
-@app.post("/api/login")
-def login():
-    return {
-        "token": "master_user_token",
-        "email": "sinu11915@gmail.com",
-        "phone": "6290565859",
-        "user_id": "NL-PRO-01"
-    }
-
-@app.post("/api/support")
-def support(message: str = Form("support")):
-    return {"message": "Aapka message admin database me save ho gaya hai!"}
 
 @app.post("/api/analyze")
 async def analyze(
@@ -121,10 +136,7 @@ async def analyze(
 ):
     has_image = bool(file and file.filename)
     user_query = prompt.strip() if prompt else ""
-    
-    # Instant internal analysis (0.01 seconds)
-    analysis = generate_ai_analysis(user_query, has_image)
-    return {"analysis": analysis}
+    return {"analysis": generate_ai_analysis(user_query, has_image)}
 
 @app.get("/", response_class=HTMLResponse)
 def home():
@@ -134,7 +146,7 @@ def home():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>NiftyLens Pro - AI Analyst</title>
+        <title>NiftyLens Pro - Multi-Lingual AI</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     </head>
@@ -142,19 +154,19 @@ def home():
         
         <div class="fixed top-0 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none"></div>
 
-        <!-- TOP BAR -->
         <div class="max-w-md mx-auto p-4 relative z-10">
+            <!-- TOP BAR -->
             <div class="flex justify-between items-center py-3 border-b border-slate-800">
                 <div class="flex items-center space-x-2">
                     <i class="fa-solid fa-bolt text-emerald-400 text-2xl drop-shadow-[0_0_8px_rgba(52,211,153,0.6)]"></i>
                     <h1 class="text-xl font-extrabold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">NiftyLens Pro</h1>
                 </div>
                 <button onclick="clearEverything()" class="text-xs bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl hover:text-white transition">
-                    <i class="fa-solid fa-rotate-right mr-1"></i> New
+                    <i class="fa-solid fa-rotate-right mr-1"></i> New Chat
                 </button>
             </div>
 
-            <!-- MANDATORY NOTICE -->
+            <!-- NOTICE -->
             <div class="my-3 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-start space-x-2">
                 <i class="fa-solid fa-triangle-exclamation text-amber-400 text-xs mt-0.5"></i>
                 <p class="text-[10px] text-amber-200/90 leading-tight">
@@ -178,10 +190,10 @@ def home():
 
             <!-- HINT -->
             <div id="welcomeHint" class="p-8 text-center text-slate-500 my-10">
-                <i class="fa-solid fa-microchip text-4xl mb-3 text-slate-700"></i>
-                <p class="text-xs text-slate-300 font-semibold mb-1">Instant Market Prediction Engine</p>
+                <i class="fa-solid fa-language text-4xl mb-3 text-slate-700"></i>
+                <p class="text-xs text-slate-300 font-semibold mb-1">Hindi, English & Bengali Support</p>
                 <p class="text-[11px] text-slate-500">
-                    Niche <strong>+</strong> icon se screenshot upload karein ya direct likhein: <em>"Nifty 50 buy ya sell"</em>, <em>"Tata Steel"</em> ya <em>"Bank Nifty"</em>.
+                    Aap Hindi ya Bengali me bhi likh sakte hain: <em>"Nifty buy korbo na sell?"</em> ya <em>"Tata steel buy kare ya sell?"</em>.
                 </p>
             </div>
         </div>
@@ -190,12 +202,12 @@ def home():
         <div class="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-3.5 bg-slate-950/95 backdrop-blur-2xl border-t border-slate-800 z-30">
             <input id="fileInput" type="file" accept="image/*" class="hidden" onchange="previewImg(event)">
             
-            <div class="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-2xl p-1.5 px-3 focus-within:border-emerald-500">
+            <div class="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-2xl p-1.5 px-3 focus-within:border-emerald-500 transition">
                 <button onclick="document.getElementById('fileInput').click()" class="text-slate-400 hover:text-emerald-400 p-2 text-lg">
                     <i class="fa-solid fa-circle-plus"></i>
                 </button>
-                <input id="promptInput" type="text" class="flex-1 bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none" placeholder="Nifty 50, Bank Nifty, Tata Steel buy ya sell?...">
-                <button id="anBtn" onclick="analyzeChart()" class="bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-bold p-2.5 px-3.5 rounded-xl text-xs">
+                <input id="promptInput" type="text" class="flex-1 bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none" placeholder="Puchiye: Nifty, Tata Steel, buy ya sell?..." onkeydown="if(event.key==='Enter') analyzeChart()">
+                <button id="anBtn" onclick="analyzeChart()" class="bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-bold p-2.5 px-3.5 rounded-xl text-xs transition">
                     <i class="fa-solid fa-arrow-up"></i>
                 </button>
             </div>
@@ -230,11 +242,15 @@ def home():
 
             async function analyzeChart(){
                 const fi = document.getElementById('fileInput');
-                const prompt = document.getElementById('promptInput').value.trim();
+                const promptEl = document.getElementById('promptInput');
+                const prompt = promptEl.value.trim();
                 
                 if(!prompt && !fi.files[0]){
-                    return alert("Kripya kuch likhein (jaise: 'Nifty 50 buy ya sell') ya photo upload karein!");
+                    return alert("Kripya kuch likhein ya photo select karein!");
                 }
+
+                // 1. AUTO-CLEAR TYPING BOX IMMEDIATELY (Like WhatsApp / ChatGPT)
+                promptEl.value = '';
 
                 const btn = document.getElementById('anBtn');
                 btn.disabled = true;
@@ -245,6 +261,7 @@ def home():
                 if(fi.files[0]){
                     fd.append('file', fi.files[0]);
                 }
+                removeAttachedImage();
 
                 try {
                     const res = await fetch('/api/analyze', { method:'POST', body: fd });
