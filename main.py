@@ -1,21 +1,21 @@
 import os
 import io
 import sqlite3
+import hashlib
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse
-from passlib.context import CryptContext
-from jose import jwt
 from PIL import Image
 from pydantic import BaseModel
 
 app = FastAPI(title="NiftyLens AI")
 
-SECRET_KEY = "my_super_secret_trading_jwt_key"
-ALGORITHM = "HS256"
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Password Hashing Helper (100% Reliable, Zero Dependency Crash)
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest()
 
+# Database Setup
 def init_db():
-    conn = sqlite3.connect("database.db")
+    conn = sqlite3.connect("users.db")
     c = conn.cursor()
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
@@ -45,32 +45,38 @@ class LoginData(BaseModel):
 
 @app.post("/api/register")
 def register(data: RegisterData):
-    conn = sqlite3.connect("database.db")
-    c = conn.cursor()
-    hashed = pwd_context.hash(data.password)
     try:
+        conn = sqlite3.connect("users.db")
+        c = conn.cursor()
+        hashed = hash_password(data.password)
         c.execute("INSERT INTO users (email, phone, password) VALUES (?, ?, ?)",
                   (data.email.strip().lower(), data.phone.strip(), hashed))
         conn.commit()
-    except sqlite3.IntegrityError:
         conn.close()
-        raise HTTPException(status_code=400, detail="Email ya Phone pehle se registered hai!")
-    conn.close()
-    return {"message": "Registration successful! Ab login karein."}
+        return {"message": "Registration successful! Ab Login karein."}
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=400, detail="Yeh Email ya Mobile pehle se registered hai!")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
 
 @app.post("/api/login")
 def login(data: LoginData):
-    conn = sqlite3.connect("database.db")
-    c = conn.cursor()
-    c.execute("SELECT email, password FROM users WHERE email=? OR phone=?", 
-              (data.identifier.strip().lower(), data.identifier.strip()))
-    user = c.fetchone()
-    conn.close()
-    if not user or not pwd_context.verify(data.password, user[1]):
-        raise HTTPException(status_code=400, detail="Galat Email/Phone ya Password!")
-    
-    token = jwt.encode({"sub": user[0]}, SECRET_KEY, algorithm=ALGORITHM)
-    return {"token": token, "email": user[0]}
+    try:
+        conn = sqlite3.connect("users.db")
+        c = conn.cursor()
+        c.execute("SELECT email, password FROM users WHERE email=? OR phone=?", 
+                  (data.identifier.strip().lower(), data.identifier.strip()))
+        user = c.fetchone()
+        conn.close()
+        
+        if not user or user[1] != hash_password(data.password):
+            raise HTTPException(status_code=400, detail="Galat Email/Phone ya Password!")
+        
+        return {"token": "authenticated_user", "email": user[0]}
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
 
 @app.post("/api/analyze")
 async def analyze(
@@ -141,6 +147,7 @@ def home():
                 <button id="logoutBtn" onclick="logout()" class="hidden text-xs bg-red-500/20 text-red-400 px-3 py-1.5 rounded-lg">Logout</button>
             </div>
 
+            <!-- AUTH BOX -->
             <div id="authSection" class="my-auto py-6">
                 <div class="bg-slate-900 p-6 rounded-2xl border border-slate-800 shadow-2xl">
                     <div class="flex justify-center space-x-6 mb-6 border-b border-slate-800 pb-2">
@@ -157,7 +164,7 @@ def home():
                             <label class="text-xs text-slate-400">Password</label>
                             <input id="lPass" type="password" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 mt-1 text-sm text-white" placeholder="••••••••">
                         </div>
-                        <button onclick="loginUser()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-3 rounded-xl">Login</button>
+                        <button id="lBtn" onclick="loginUser()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-3 rounded-xl transition">Login</button>
                     </div>
 
                     <div id="regForm" class="space-y-4 hidden">
@@ -173,11 +180,12 @@ def home():
                             <label class="text-xs text-slate-400">Password</label>
                             <input id="rPass" type="password" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 mt-1 text-sm text-white" placeholder="••••••••">
                         </div>
-                        <button onclick="registerUser()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-3 rounded-xl">Register</button>
+                        <button id="rBtn" onclick="registerUser()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-3 rounded-xl transition">Register</button>
                     </div>
                 </div>
             </div>
 
+            <!-- DASHBOARD -->
             <div id="dashSection" class="hidden flex-1 py-4 flex flex-col space-y-4">
                 <div class="border-2 border-dashed border-slate-800 hover:border-emerald-500 rounded-2xl p-4 text-center cursor-pointer bg-slate-900/60" onclick="document.getElementById('fileInput').click()">
                     <input id="fileInput" type="file" accept="image/*" class="hidden" onchange="previewImg(event)">
@@ -232,14 +240,29 @@ def home():
                 const password = document.getElementById('rPass').value;
                 if(!email || !phone || !password) return alert("Sabhi details bharein!");
 
-                const res = await fetch('/api/register', {
-                    method:'POST',
-                    headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({email, phone, password})
-                });
-                const d = await res.json();
-                if(res.ok){ alert(d.message); switchTab('login'); }
-                else alert(d.detail);
+                const btn = document.getElementById('rBtn');
+                btn.innerText = "Registering...";
+                btn.disabled = true;
+
+                try {
+                    const res = await fetch('/api/register', {
+                        method:'POST',
+                        headers:{'Content-Type':'application/json'},
+                        body: JSON.stringify({email, phone, password})
+                    });
+                    const d = await res.json();
+                    if(res.ok){ 
+                        alert(d.message || "Registration Successful!"); 
+                        switchTab('login'); 
+                    } else {
+                        alert(d.detail || "Registration fail hua!");
+                    }
+                } catch(e) {
+                    alert("Network error: " + e.message);
+                } finally {
+                    btn.innerText = "Register";
+                    btn.disabled = false;
+                }
             }
 
             async function loginUser(){
@@ -247,16 +270,29 @@ def home():
                 const password = document.getElementById('lPass').value;
                 if(!identifier || !password) return alert("Email/Phone aur Password bharein!");
 
-                const res = await fetch('/api/login', {
-                    method:'POST',
-                    headers:{'Content-Type':'application/json'},
-                    body: JSON.stringify({identifier, password})
-                });
-                const d = await res.json();
-                if(res.ok){
-                    localStorage.setItem('t', d.token);
-                    checkState();
-                } else alert(d.detail);
+                const btn = document.getElementById('lBtn');
+                btn.innerText = "Logging in...";
+                btn.disabled = true;
+
+                try {
+                    const res = await fetch('/api/login', {
+                        method:'POST',
+                        headers:{'Content-Type':'application/json'},
+                        body: JSON.stringify({identifier, password})
+                    });
+                    const d = await res.json();
+                    if(res.ok){
+                        localStorage.setItem('t', d.token);
+                        checkState();
+                    } else {
+                        alert(d.detail || "Login fail hua!");
+                    }
+                } catch(e) {
+                    alert("Network error: " + e.message);
+                } finally {
+                    btn.innerText = "Login";
+                    btn.disabled = false;
+                }
             }
 
             function checkState(){
