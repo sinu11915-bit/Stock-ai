@@ -2,6 +2,9 @@ import os
 import io
 import sqlite3
 import hashlib
+import base64
+import json
+import urllib.request
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse
 from PIL import Image
@@ -118,55 +121,88 @@ async def analyze(
 ):
     api_key = os.environ.get("GEMINI_API_KEY", "").strip()
     if not api_key:
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY configure nahi hai!")
+        raise HTTPException(status_code=500, detail="GEMINI_API_KEY Render par configure nahi hai!")
 
     try:
-        from google import genai
-        client = genai.Client(api_key=api_key)
+        # Read and prepare image
+        raw_bytes = await file.read()
+        pil_img = Image.open(io.BytesIO(raw_bytes)).convert("RGB")
+        pil_img.thumbnail((1200, 1200))
 
-        image_bytes = await file.read()
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        image.thumbnail((1200, 1200)) # Compress for lighting speed
+        buf = io.BytesIO()
+        pil_img.save(buf, format="JPEG", quality=85)
+        jpeg_bytes = buf.getvalue()
+        b64_image = base64.b64encode(jpeg_bytes).decode("utf-8")
+
+        user_query = prompt if prompt else "Is chart ka technical analysis karke exact Buy ya Sell levels batao."
 
         system_prompt = f"""
-        Aap Indian Stock Market (NSE/BSE/Nifty/BankNifty) ke Expert Technical Analyst hain.
-        User Sawal: {prompt if prompt else 'Is chart ka analysis karke exact Buy ya Sell levels batao.'}
+        Aap Indian Stock Market (NSE/BSE/Nifty/BankNifty/Stocks/Options) ke Senior Technical Analyst hain.
+        User Sawal: {user_query}
 
-        Is chart ke right-side Y-axis ke REAL PRICES ko read karein aur niche diye format me Hinglish report de:
-        
-        📈 1. TIMEFRAME & TREND:
-        - Pehchana gaya Timeframe aur Market Bias (Bullish / Bearish / Sideways).
+        Chart ke right-side Y-axis par jo ASLI REAL PRICES dikh rahe hain sirf unhi numbers ko use karke Hindi/Hinglish me exact report de:
+
+        📈 1. TIMEFRAME & CURRENT TREND:
+        - Chart ka Timeframe aur Trend (Bullish / Bearish / Sideways).
 
         🔍 2. KEY LEVELS (Support & Resistance):
         - Current Market Price (CMP)
         - Major Support & Resistance levels.
 
         ⚡ 3. TRADE PREDICTION (Buy / Sell):
-        - 🟢 BUY Setup: Konse level ke upar green candle close par entry banti hai.
-        - 🔴 SELL/PUT Setup: Konse level ke niche breakdown par sell banta hai.
-        - 🛑 STRICT STOP LOSS (SL)
-        - 🏁 TARGET 1 & TARGET 2
+        - 🟢 BUY SETUP: Entry Price, Stop Loss (SL), Target 1 & Target 2
+        - 🔴 SELL/PUT SETUP: Entry Price, Stop Loss (SL), Target 1 & Target 2
 
-        ⚠️ 4. LOGIC:
-        - 2 lines me batayein kyu yeh setup ban raha hai.
+        ⚠️ 4. TRADE LOGIC:
+        - 2 lines me batayein kyu yeh level banta hai.
         """
 
-        models_to_try = ["gemini-2.0-flash", "gemini-flash-latest", "gemini-2.5-flash"]
-        for model_name in models_to_try:
+        # Direct Google AI REST call (100% Reliable, No SDK mismatches)
+        models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-flash-latest"]
+        last_err = ""
+
+        for m in models:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={api_key}"
+            payload = {
+                "contents": [{
+                    "parts": [
+                        {"text": system_prompt},
+                        {
+                            "inline_data": {
+                                "mime_type": "image/jpeg",
+                                "data": b64_image
+                            }
+                        }
+                    ]
+                }]
+            }
+
+            req = urllib.request.Request(
+                url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json"}
+            )
+
             try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=[image, system_prompt]
-                )
-                if response and response.text:
-                    return {"analysis": response.text}
-            except Exception:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    result = json.loads(resp.read().decode("utf-8"))
+                    text = result["candidates"][0]["content"]["parts"][0]["text"]
+                    if text:
+                        return {"analysis": text}
+            except urllib.error.HTTPError as http_e:
+                err_body = http_e.read().decode("utf-8")
+                last_err = f"API Error ({http_e.code}): {err_body}"
+                continue
+            except Exception as ex:
+                last_err = str(ex)
                 continue
 
-        raise HTTPException(status_code=500, detail="AI Server Busy, kripya dobara try karein!")
+        raise HTTPException(status_code=500, detail=f"AI Error: {last_err}")
 
+    except HTTPException as he:
+        raise he
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"AI Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Processing Error: {str(e)}")
 
 @app.get("/", response_class=HTMLResponse)
 def home():
@@ -182,11 +218,10 @@ def home():
     </head>
     <body class="bg-[#070b13] text-slate-100 min-h-screen font-sans relative overflow-x-hidden">
         
-        <!-- NEON GLOW LIGHTS -->
         <div class="fixed top-0 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-[120px] pointer-events-none"></div>
         <div class="fixed bottom-0 right-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-[120px] pointer-events-none"></div>
 
-        <!-- SIDEBAR DRAWER (3 LINES MENU) -->
+        <!-- SIDEBAR DRAWER -->
         <div id="drawerOverlay" onclick="toggleMenu()" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 hidden transition-opacity"></div>
         <div id="sidebarDrawer" class="fixed top-0 left-0 h-full w-72 bg-slate-900/95 border-r border-slate-800 p-5 z-50 transform -translate-x-full transition-transform duration-300 flex flex-col justify-between shadow-2xl backdrop-blur-md">
             <div>
@@ -242,7 +277,6 @@ def home():
 
         <div class="max-w-md mx-auto p-4 min-h-screen flex flex-col justify-between relative z-10">
             
-            <!-- HEADER -->
             <div class="flex justify-between items-center py-3 border-b border-slate-800/80">
                 <div class="flex items-center space-x-3">
                     <button id="menuBtn" onclick="toggleMenu()" class="hidden text-slate-300 hover:text-emerald-400 text-lg p-1.5 rounded-lg bg-slate-900/80 border border-slate-800">
@@ -271,7 +305,6 @@ def home():
                         <button id="tabR" onclick="switchTab('reg')" class="text-slate-400 font-semibold pb-1 text-sm">Register</button>
                     </div>
 
-                    <!-- LOGIN -->
                     <div id="loginForm" class="space-y-4">
                         <div>
                             <label class="text-[11px] text-slate-400">Email ya Mobile</label>
@@ -284,7 +317,6 @@ def home():
                         <button id="lBtn" onclick="loginUser()" class="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-slate-950 font-extrabold py-3.5 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] transition text-xs uppercase tracking-wider">Login Karein</button>
                     </div>
 
-                    <!-- REGISTER -->
                     <div id="regForm" class="space-y-4 hidden">
                         <div>
                             <label class="text-[11px] text-slate-400">Email Address</label>
@@ -303,10 +335,9 @@ def home():
                 </div>
             </div>
 
-            <!-- DASHBOARD (LIGHTING & GLOW DESIGN) -->
+            <!-- DASHBOARD -->
             <div id="dashSection" class="hidden flex-1 py-2 flex flex-col space-y-3">
                 
-                <!-- UPLOAD AREA -->
                 <div class="border-2 border-dashed border-slate-800 hover:border-emerald-400/80 rounded-2xl p-4 text-center cursor-pointer bg-slate-900/50 backdrop-blur-md shadow-lg transition" onclick="document.getElementById('fileInput').click()">
                     <input id="fileInput" type="file" accept="image/*" class="hidden" onchange="previewImg(event)">
                     <div id="uBox">
@@ -317,13 +348,11 @@ def home():
                     <img id="preview" class="hidden max-h-48 mx-auto rounded-lg shadow-xl mt-1 object-contain" />
                 </div>
 
-                <!-- PROMPT -->
                 <div>
                     <label class="text-[11px] text-slate-400">Aapka Sawal / Analysis Prompt</label>
                     <input id="promptInput" type="text" class="w-full bg-slate-900/90 border border-slate-800 rounded-xl p-3 mt-1 text-xs text-white focus:border-emerald-400 focus:outline-none" placeholder="e.g. Abhi Buy karein ya Sell? Levels batao">
                 </div>
 
-                <!-- ACTION BUTTONS: PREDICT + CLEAR/REFRESH -->
                 <div class="flex space-x-2">
                     <button id="anBtn" onclick="analyzeChart()" class="flex-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:opacity-95 text-slate-950 font-black py-3.5 rounded-xl shadow-[0_0_20px_rgba(52,211,153,0.4)] transition text-xs uppercase tracking-wider flex items-center justify-center space-x-2">
                         <i class="fa-solid fa-wand-magic-sparkles"></i>
@@ -334,7 +363,6 @@ def home():
                     </button>
                 </div>
 
-                <!-- PREDICTION RESULT BOX -->
                 <div id="resBox" class="hidden bg-slate-900/95 border border-emerald-500/40 rounded-2xl p-4 mt-2 shadow-[0_0_25px_rgba(16,185,129,0.15)]">
                     <h3 class="text-xs font-extrabold text-emerald-400 border-b border-slate-800 pb-2 flex items-center tracking-wide">
                         <i class="fa-solid fa-robot mr-2 text-sm text-cyan-400"></i> AI Technical Prediction
@@ -344,13 +372,18 @@ def home():
 
             </div>
 
-            <!-- FOOTER -->
             <div class="text-center py-2 text-[9px] text-slate-600">
                 NiftyLens Pro &bull; AI Powered Technical Analysis
             </div>
         </div>
 
         <script>
+            function resetButtonUI(){
+                const btn = document.getElementById('anBtn');
+                btn.disabled = false;
+                btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles mr-2"></i> Predict Buy / Sell`;
+            }
+
             function toggleMenu(){
                 const drawer = document.getElementById('sidebarDrawer');
                 const overlay = document.getElementById('drawerOverlay');
@@ -482,6 +515,7 @@ def home():
                     document.getElementById('dashSection').classList.add('hidden');
                     document.getElementById('menuBtn').classList.add('hidden');
                 }
+                resetButtonUI();
             }
 
             function logout(){ 
@@ -511,6 +545,7 @@ def home():
                 document.getElementById('uBox').classList.remove('hidden');
                 document.getElementById('resBox').classList.add('hidden');
                 document.getElementById('resText').innerText = '';
+                resetButtonUI();
             }
 
             async function analyzeChart(){
@@ -529,14 +564,16 @@ def home():
                 try {
                     const res = await fetch('/api/analyze', { method:'POST', body: fd });
                     const d = await res.json();
+                    resetButtonUI();
                     if(res.ok){
                         document.getElementById('resBox').classList.remove('hidden');
                         document.getElementById('resText').innerText = d.analysis;
-                    } else alert(d.detail || "Error aaya!");
-                } catch(e){ alert("Error: "+e.message); }
-                finally {
-                    btn.disabled = false;
-                    btn.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles mr-2"></i> Predict Buy / Sell`;
+                    } else {
+                        alert(d.detail || "Error aaya!");
+                    }
+                } catch(e){ 
+                    resetButtonUI();
+                    alert("Error: "+e.message); 
                 }
             }
 
