@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+google-genai
+pillow
+pydantic
+passlib
+bcrypt
+python-jose
+python-multipart
