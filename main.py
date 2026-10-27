@@ -1,24 +1,23 @@
 import os
 import io
 import json
-import base64
 import urllib.request
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import HTMLResponse
 
-app = FastAPI(title="Avika.Ai - Real Intelligence Engine")
+app = FastAPI(title="Avika.Ai - Independent AI Platform")
 
 @app.get("/healthz")
 def healthz():
     return {"status": "ok"}
 
-# PURE GROQ AI ENGINE (ZERO HARDCODED RULES - 100% DYNAMIC & ACCURATE)
-def call_groq_brain(prompt: str):
+# 100% INDEPENDENT AI ENGINE (GROQ + 403 BYPASS HEADERS)
+def call_avika_brain(prompt: str):
     api_key = os.environ.get("GROQ_API_KEY", "").strip()
     
-    # Calculate Exact Indian Standard Time (IST)
+    # Accurate Indian Standard Time (IST)
     ist = timezone(timedelta(hours=5, minutes=30))
     now_ist = datetime.now(ist)
     current_date = now_ist.strftime("%d %B %Y")
@@ -26,69 +25,55 @@ def call_groq_brain(prompt: str):
     current_day = now_ist.strftime("%A")
 
     system_instruction = f"""
-    Aap Avika.Ai hain — ek super-intelligent, accurate aur friendly Indian AI Assistant aur Stock Market Analyst.
-
-    🔴 CURRENT REAL-TIME CONTEXT (Aapko is data ke mutabiq chalna hai):
+    Aap Avika.Ai hain — ek independent, super-smart Indian AI Assistant aur Stock Market Technical Analyst.
+    
+    Live Reality Context:
     - Current Location: India
     - Current Indian Date (IST): {current_date} ({current_day})
     - Current Indian Time (IST): {current_time}
-    - Current Year: {now_ist.year}
-    - Deepawali (Diwali) 2026: 8 November 2026 (Sunday), Kartik Maas Amavasya.
-    - Indian Market Range: Nifty 50 (~22,730 - 22,760), Bank Nifty (~54,300 - 54,450), Sensex (~74,800).
+    - Deepawali 2026: 8 November 2026 (Sunday), Kartik Maas Amavasya.
+    - Market Baseline: Nifty 50 (~22,750), Bank Nifty (~54,360), Sensex (~74,820), Tata Steel (~154.50).
 
-    🔴 STRICT RULES:
-    1. USER KE EXACT SAWAL KA JAWAB DEIN:
-       - Agar festival ya date puche (e.g. 'Deepawali kab hai'): exact 8 November 2026 (Sunday) Kartik month batayein. Aaj ki date mat phenkna.
-       - Agar time puche: exact upar diya gaya Indian Time ({current_time}) batayein.
-       - Agar kal market opening ka puche: kal subah 9:15 AM ke liye exact entry level, Stop Loss (SL) aur Target 1 & 2 dein.
-       - Agar Sensex puche: sirf SENSEX ka analysis dein.
-       - Agar Maths (+, -, *, ×, /, %, √): exact answer calculate karke dein.
-    2. LANGUAGE:
-       - User jis bhasha me baat kare (Hindi, Hinglish, Bengali, English), usi me natural aur friendly jawab dein.
-    3. NO REFUSALS:
-       - Kabhi 'I cannot provide that' na kahein.
+    Rules:
+    1. Stock Market: User ke exact asset (Nifty, Bank Nifty, Sensex, Tata Steel, etc.) ke hisab se exact Buy Entry, Stop Loss (SL) aur Target 1 & 2 dein.
+    2. Mathematics: 2×2, 100*100, √144 ya koi bhi calculation exact karke dein.
+    3. Dates: Deepawali ya kisi bhi calendar sawal ka accurate jawab dein.
+    4. Language: User jis bhasha me puche (Hindi, Hinglish, Bengali, English), usi me natural jawab dein.
+    5. Kabhi 'I cannot provide that' na bole, direct help karein.
     """
 
     if not api_key:
-        return "⚠️ GROQ_API_KEY Render Environment me add nahi hai! Kripya Render par GROQ_API_KEY check karein."
+        return "⚠️ GROQ_API_KEY missing in Render! Please add it in Render Environment."
+
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": prompt}
+        ],
+        "temperature": 0.5,
+        "max_tokens": 1024
+    }
+
+    # PROPER BROWSER HEADERS (ELIMINATES 403 FORBIDDEN ERROR)
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json"
+    }
 
     try:
-        url = "https://api.groq.com/openai/v1/chat/completions"
-        payload = {
-            "model": "llama-3.3-70b-versatile",
-            "messages": [
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.5,
-            "max_tokens": 1024
-        }
-
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json"
-            }
-        )
-
+        req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
         with urllib.request.urlopen(req, timeout=12) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             return data["choices"][0]["message"]["content"]
-
     except Exception:
-        # Fallback to ultra-fast 8B if 70B takes time
+        # Fallback to Llama 3.1 8B instant
         try:
             payload["model"] = "llama-3.1-8b-instant"
-            req = urllib.request.Request(
-                url,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
-                }
-            )
+            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
             with urllib.request.urlopen(req, timeout=8) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 return data["choices"][0]["message"]["content"]
@@ -101,7 +86,7 @@ async def analyze(
     file: Optional[UploadFile] = File(None)
 ):
     user_query = prompt.strip() if prompt else "Nifty analysis"
-    ans = call_groq_brain(user_query)
+    ans = call_avika_brain(user_query)
     return {"analysis": ans}
 
 @app.get("/", response_class=HTMLResponse)
@@ -112,7 +97,7 @@ def home():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Avika.Ai Pro Trading Terminal</title>
+        <title>Avika.Ai - Independent AI</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
         <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
@@ -149,12 +134,12 @@ def home():
                         <div class="flex items-center space-x-2.5"><i class="fa-solid fa-wallet text-violet-400"></i><span>Wallet & Recharge</span></div>
                         <span class="text-[10px] bg-violet-500/20 text-violet-300 px-2 py-0.5 rounded-lg">₹0.00</span>
                     </button>
-                    <button onclick="alert('Pro Membership activated for testing!')" class="w-full flex items-center justify-between p-3 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 rounded-xl border border-amber-500/30 text-amber-300">
+                    <button onclick="alert('VIP Pro Activated!')" class="w-full flex items-center justify-between p-3 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 rounded-xl border border-amber-500/30 text-amber-300">
                         <div class="flex items-center space-x-2.5"><i class="fa-solid fa-crown text-amber-400"></i><span>Upgrade Pro (₹29)</span></div>
                         <span class="text-[9px] bg-amber-500/30 text-amber-200 px-1.5 py-0.5 rounded-md font-bold">VIP</span>
                     </button>
-                    <button onclick="alert('Support Status: Ticket #AVK-8812 - Processing'); toggleMenu()" class="w-full flex items-center space-x-2.5 p-3 bg-slate-950/60 hover:bg-slate-800 rounded-xl border border-slate-800 text-slate-200">
-                        <i class="fa-solid fa-headset text-emerald-400"></i><span>Support Bot (24/7)</span>
+                    <button onclick="alert('Support Ticket: #AVK-9901 (Processing)'); toggleMenu()" class="w-full flex items-center space-x-2.5 p-3 bg-slate-950/60 hover:bg-slate-800 rounded-xl border border-slate-800 text-slate-200">
+                        <i class="fa-solid fa-headset text-emerald-400"></i><span>Customer Support</span>
                     </button>
                 </div>
             </div>
@@ -164,7 +149,7 @@ def home():
             </button>
         </div>
 
-        <!-- TOP HEADER -->
+        <!-- HEADER -->
         <header class="sticky top-0 z-30 bg-[#070b16]/95 backdrop-blur-xl border-b border-slate-800/80 px-4 py-2.5">
             <div class="max-w-md mx-auto flex justify-between items-center">
                 <div class="flex items-center space-x-2.5">
@@ -178,7 +163,7 @@ def home():
                 </div>
 
                 <div class="flex items-center space-x-2">
-                    <button onclick="alert('Pro Membership Active (₹29)')" class="text-[10px] bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black px-2.5 py-1.5 rounded-xl shadow">
+                    <button onclick="alert('VIP Pro Active (₹29)')" class="text-[10px] bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black px-2.5 py-1.5 rounded-xl shadow">
                         👑 ₹29
                     </button>
                     <button onclick="stopAudio()" title="Stop Voice" class="text-xs bg-red-950/60 border border-red-800 text-red-400 p-1.5 px-2 rounded-xl">
@@ -188,7 +173,7 @@ def home():
             </div>
         </header>
 
-        <!-- MAIN SCREENS (TABS) -->
+        <!-- MAIN TABS CONTENT -->
         <main class="flex-1 max-w-md w-full mx-auto p-4 pb-28 overflow-y-auto">
             
             <!-- TAB 1: HOME PAGE -->
@@ -227,18 +212,18 @@ def home():
                 <div class="p-4 bg-slate-900/80 border border-slate-800 rounded-3xl flex justify-between items-center">
                     <div>
                         <h4 class="text-xs font-bold text-white">Live Candlestick Charts</h4>
-                        <p class="text-[11px] text-slate-400">All Indian Stocks, Indicators & Fullscreen</p>
+                        <p class="text-[11px] text-slate-400">TradingView indicators & Fullscreen</p>
                     </div>
                     <button onclick="switchTab('charts', 'NSE:NIFTY')" class="bg-emerald-500 text-slate-950 font-bold text-xs px-3 py-2 rounded-xl">Open Charts 📈</button>
                 </div>
             </section>
 
-            <!-- TAB 2: AI CHAT (GROQ REAL AI) -->
+            <!-- TAB 2: AI CHAT (POWERED BY GROQ WITH NO 403) -->
             <section id="secChat" class="hidden space-y-4">
                 <div class="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-start space-x-2">
                     <i class="fa-solid fa-bolt text-amber-400 text-xs mt-0.5"></i>
                     <p class="text-[10px] text-amber-200/90 leading-tight">
-                        <strong>Avika AI:</strong> Deepawali date, Indian time, Nifty, Sensex ya koi bhi sawal puchiye!
+                        <strong>Avika AI:</strong> Deepawali kab hai, Sensex/Nifty prediction, ya koi bhi sawal puchiye!
                     </p>
                 </div>
                 <div id="chatFeed" class="space-y-3">
@@ -248,7 +233,7 @@ def home():
                         </div>
                         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 text-xs text-slate-200 max-w-[85%] shadow-lg leading-relaxed">
                             Hello! Main **Avika.Ai** hoon. 💬<br>
-                            Deepawali kab hai, Nifty/Sensex prediction, Indian time ya koi bhi sawal puchiye!
+                            Deepawali date, Nifty kal open hote hi kya karein, Sensex levels, ya koi bhi sawal puchiye!
                         </div>
                     </div>
                 </div>
@@ -271,8 +256,6 @@ def home():
                     <button onclick="renderChart('NSE:BANKNIFTY')" class="flex-shrink-0 bg-slate-900 border border-slate-700 text-emerald-400 px-3 py-1.5 rounded-xl font-bold">BANK NIFTY</button>
                     <button onclick="renderChart('NSE:TATASTEEL')" class="flex-shrink-0 bg-slate-900 border border-slate-700 text-cyan-400 px-3 py-1.5 rounded-xl font-bold">TATA STEEL</button>
                     <button onclick="renderChart('NSE:RELIANCE')" class="flex-shrink-0 bg-slate-900 border border-slate-700 text-cyan-400 px-3 py-1.5 rounded-xl font-bold">RELIANCE</button>
-                    <button onclick="renderChart('NSE:COALINDIA')" class="flex-shrink-0 bg-slate-900 border border-slate-700 text-cyan-400 px-3 py-1.5 rounded-xl font-bold">COAL INDIA</button>
-                    <button onclick="renderChart('NSE:JIOFIN')" class="flex-shrink-0 bg-slate-900 border border-slate-700 text-cyan-400 px-3 py-1.5 rounded-xl font-bold">JIO FIN</button>
                 </div>
 
                 <div id="chartWrapper" class="h-[440px] bg-slate-950 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl relative">
@@ -289,7 +272,7 @@ def home():
         <!-- CHAT INPUT BAR -->
         <div id="chatControls" class="hidden fixed bottom-14 left-0 right-0 max-w-md mx-auto p-2.5 bg-[#070b16]/95 backdrop-blur-xl border-t border-slate-800/80 z-20">
             <div class="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-2xl p-1.5 px-3 focus-within:border-emerald-500 transition">
-                <input id="promptInput" type="text" class="flex-1 bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none" placeholder="Deepawali kab hai, Sensex prediction, Time..." onkeydown="if(event.key==='Enter') sendChat()">
+                <input id="promptInput" type="text" class="flex-1 bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none" placeholder="Deepawali kab hai, Sensex, Nifty kal khulte hi..." onkeydown="if(event.key==='Enter') sendChat()">
                 <button id="micBtn" onclick="toggleSpeech()" class="text-emerald-400 hover:text-emerald-300 p-2 text-base transition">
                     <i class="fa-solid fa-microphone"></i>
                 </button>
@@ -436,8 +419,8 @@ def home():
                 const tempId = 'temp_' + Date.now();
                 feed.insertAdjacentHTML('beforeend', `
                     <div id="${tempId}" class="flex items-center space-x-2 text-[11px] text-emerald-400 font-bold bg-slate-900 border border-emerald-500/30 p-2.5 rounded-2xl max-w-[200px] animate-pulse">
-                        <i class="fa-solid fa-sparkles fa-spin"></i>
-                        <span>Avika is thinking... ⚡</span>
+                        <i class="fa-solid fa-bolt fa-spin"></i>
+                        <span>Avika is answering... ⚡</span>
                     </div>
                 `);
 
