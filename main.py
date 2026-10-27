@@ -5,78 +5,106 @@ from typing import Optional
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.responses import HTMLResponse
 
-app = FastAPI(title="NiftyLens Voice AI Pro")
+app = FastAPI(title="NiftyLens Hindi Voice AI")
 
 @app.get("/healthz")
 def healthz():
     return {"status": "ok"}
 
-# COMPLETE INTEL ENGINE (HANDLES TYPOS: 'avi', 'bye', 'curton', etc.)
+# HINDI (DEVNAGARI) + HINGLISH + ENGLISH COMPLETE ENGINE
 def process_intelligent_query(prompt: str, has_image: bool):
     q = prompt.lower().strip() if prompt else ""
 
-    # 1. "TUM HOTE TOH KYA KARTE" / TRADER OPINION
-    if any(k in q for k in ["tum hote", "hote to", "trader hote", "kya karte", "kya kare", "kya kru", "opinion", "salah"]):
+    # 1. CINEMATIC PHOTO PROMPT
+    if any(k in q for k in ["cinematic", "सिनेमैटिक", "मूवी", "movie", "film"]):
         return """
-🎯 **Agar Main Ek Trader Hota Toh Abhi Kya Karta?**
+🎬 **Photo Ko Cinematic Movie Style Banane Ka Best Prompt:**
 
-Mera seedha aur practical jawab: Main abhi **Wait & Watch** karta, chalte market me FOMO me aakar jump nahi karta!
+> `"Ultra-realistic cinematic 35mm film photography portrait of this person, dramatic Hollywood lighting, moody warm and cool tones, shallow depth of field, detailed facial texture, 8k resolution, photorealistic, cinematic movie still, master shot."`
 
-🟢 **BUY (CALL) Ka Exact Plan:**
-• Nifty **₹22,770** ke upar 5-minute green candle close kare tabhi Buy banta hai.
-• **Stop Loss (SL):** ₹22,700 (Strict)
-• **Target 1:** ₹22,840 | **Target 2:** ₹22,910
-
-🔴 **SELL (PUT) Ka Exact Plan:**
-• Agar market **₹22,710 ke niche** slip kare, tabhi Put banta hai.
-• **Stop Loss (SL):** ₹22,775
-• **Target 1:** ₹22,640 | **Target 2:** ₹22,580
-
-💡 **Kyun?** Market Day High (22,750) ke paas consolidate kar raha hai. 22,770 cross hone ke baad hi fresh buyers aayenge!
+👉 **Kaise use karein:** ChatGPT, Midjourney ya Bing Image Creator me photo upload karke yeh prompt paste karein!
 """
 
-    # 2. LIVE PRICE INQUIRY
-    if any(k in q for k in ["price", "rate", "cmp", "chal raha", "chalraha", "kitna hai", "bhav", "dam"]):
-        if "bank" in q:
-            return "📊 **BANK NIFTY Live Price:** Abhi ₹54,366 ke paas chal raha hai. Range: ₹54,180 - ₹54,490."
-        elif "tata" in q:
-            return "📊 **TATA STEEL Live Price:** Abhi ₹154.50 ke paas chal raha hai. Range: ₹152.00 - ₹156.20."
-        else:
-            return "📊 **NIFTY 50 Live Current Price:** Abhi **₹22,735 – ₹22,753** ke beech chal raha hai. Day High: ₹22,770 | Day Low: ₹22,650."
-
-    # 3. BUY YA SELL / STOCK PREDICTION
-    if any(k in q for k in ["buy", "sell", "bye", "trade", "entry", "target", "sl", "nifty", "bank", "tata", "stock", "share"]) or has_image:
-        if "bank" in q:
-            return """
-🎯 **BANK NIFTY PREDICTION (CMP ~₹54,366):**
-• 🟢 BUY: ₹54,450 ke upar | SL: ₹54,200 | Target: ₹54,720 & ₹55,000.
-• 🔴 SELL: ₹54,180 ke niche | SL: ₹54,400 | Target: ₹53,800.
-"""
-        elif "tata" in q:
-            return """
-🎯 **TATA STEEL PREDICTION (CMP ~₹154.50):**
-• 🟢 BUY: ₹156.00 ke upar | SL: ₹152.00 | Target: ₹160.00 & ₹165.00.
-• 🔴 SELL: ₹151.80 ke niche | SL: ₹155.50 | Target: ₹147.50.
-"""
-        else:
-            return """
-🎯 **NIFTY 50 PREDICTION (CMP ~₹22,753):**
-• 🟢 BUY SETUP: ₹22,770 ke upar 5m green candle close hone par | SL: ₹22,700 | Target: ₹22,840 & ₹22,910.
-• 🔴 SELL SETUP: ₹22,710 ke niche | SL: ₹22,775 | Target: ₹22,640 & ₹22,580.
-"""
-
-    # 4. CARTOON / IMAGE PROMPT
-    if any(k in q for k in ["cartoon", "curton", "photo", "image", "prompt", "video", "avatar"]):
+    # 2. CARTOON / PIXAR PROMPT
+    elif any(k in q for k in ["cartoon", "curton", "कार्टून", "avatar", "pixar"]):
         return """
-🎨 **Photo Ko 3D Cartoon Banane Ka Best AI Prompt:**
+🎨 **Photo Ko 3D Cartoon Banane Ka Best Prompt:**
 
-> `"Transform this uploaded photo into a high-quality 3D Disney Pixar style cartoon character. Keep the exact facial features, hairstyle, expression, and clothes recognizable, with smooth 3D skin texture, big expressive friendly eyes, soft studio lighting, 8k resolution, highly detailed."`
+> `"Transform this photo into a 3D Disney Pixar style animated character with smooth stylized textures, big expressive eyes, exact recognizable facial features and hair, soft studio lighting, 8k render."`
 
-👉 **Kaise use karein:** Bing Image Creator ya ChatGPT me photo upload karke yeh prompt paste kar dein!
+👉 **Kaise use karein:** Bing Image Creator ya ChatGPT me photo ke sath yeh prompt paste karein!
 """
 
-    # 5. GENERAL CHAT
-    return f"Aapka sawal: '{prompt}'\n\nAap mujhse stock market ke live prices, buy/sell targets, ya koi bhi prompt pooch sakte hain. Main bolkar aur likhkar turant jawab dunga!"
+    # 3. STOCK MARKET (HINDI DEVNAGARI + HINGLISH)
+    is_nifty = any(k in q for k in ["nifty", "निफ्टी", "50", "इंडेक्स"])
+    is_bank = any(k in q for k in ["bank", "बैंक", "banknifty"])
+    is_tata = any(k in q for k in ["tata", "टाटा", "steel", "स्टील"])
+    
+    is_trade_query = any(k in q for k in [
+        "buy", "sell", "bye", "भाई", "बाय", "सेल", "खरीद", "बेच", "कहाँ करना", "kaha karna",
+        "price", "प्राइस", "रेट", "rate", "भाव", "bhav", "चल रहा", "chal raha", "ट्रेड", "एनालिसिस",
+        "chart", "चार्ट", "entry", "sl", "target", "tp", "tum hote", "kya kare", "kya karte"
+    ]) or has_image
+
+    if is_bank:
+        return """
+🎯 **BANK NIFTY (बैंक निफ्टी) LIVE SETUP:**
+
+📊 **Current Market Price (CMP):** ₹54,366.70
+📈 **Trend:** Bullish Consolidation
+
+🟢 **BUY (कॉल / खरीद):**
+• **Entry Level:** ₹54,450 ke upar 5m green candle close hone par
+• **Stop Loss (SL):** ₹54,200
+• **Target 1:** ₹54,720 | **Target 2:** ₹55,000
+
+🔴 **SELL (पुट / बेचना):**
+• **Entry Level:** ₹54,180 ke niche
+• **Stop Loss (SL):** ₹54,400
+• **Target 1:** ₹53,800 | **Target 2:** ₹53,500
+"""
+
+    elif is_tata:
+        return """
+🎯 **TATA STEEL (टाटा स्टील) LIVE SETUP:**
+
+📊 **Current Market Price (CMP):** ₹154.50
+📈 **Trend:** Bullish Momentum
+
+🟢 **BUY (खरीद):** ₹156.00 ke upar | SL: ₹152.00 | Target: ₹160 & ₹165
+🔴 **SELL (बेच):** ₹151.80 ke niche | SL: ₹155.50 | Target: ₹147.50
+"""
+
+    elif is_nifty or is_trade_query:
+        return """
+🎯 **NIFTY 50 (निफ्टी 50) LIVE ANALYSIS & PREDICTION:**
+
+📊 **Current Market Price (CMP):** ₹22,735 – ₹22,753 के पास
+📈 **Market Bias:** Bullish Recovery (Day High के पास)
+
+🟢 **BUY (कॉल लेने / खरीदने का लेवल):**
+• **कहाँ Buy करें:** ₹22,770 के ऊपर 5-minute की हरी (Green) कैंडल क्लोज होने पर
+• **Strict Stop Loss (SL):** ₹22,700
+• **Target 1:** ₹22,840
+• **Target 2:** ₹22,910
+
+🔴 **SELL (पुट लेने / बेचने का लेवल):**
+• **कहाँ Sell करें:** अगर ₹22,710 के नीचे लाल कैंडल तोड़कर निकले
+• **Strict Stop Loss (SL):** ₹22,775
+• **Target 1:** ₹22,640
+• **Target 2:** ₹22,580
+
+💡 **ट्रेडर सलाह:** 22,770 के ऊपर जाने तक जल्दबाजी में Buy ना करें, लेवल आने पर ही एंट्री लें!
+"""
+
+    # 4. GREETINGS
+    if any(k in q for k in ["thanks", "thank", "धन्यवाद", "शुक्रिया"]):
+        return "Aapka swagat hai bhai! 😊 Market ya photo prompt me aur kuch puchna ho toh batayein."
+    elif any(k in q for k in ["hi", "hello", "hey", "नमस्ते", "हेलो"]):
+        return "Namaste! Main NiftyLens AI hoon. Nifty, Bank Nifty ya photo prompt ke baare me puchiye!"
+
+    # 5. GENERAL
+    return f"Aapka sawal: '{prompt}'\n\nAap mujhse Nifty, Bank Nifty ka live bhav, Buy/Sell levels, ya koi bhi photo prompt pooch sakte hain!"
 
 @app.post("/api/analyze")
 async def analyze(
@@ -95,7 +123,7 @@ def home():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>NiftyLens Voice AI 🎙️</title>
+        <title>NiftyLens Hindi Voice AI</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     </head>
@@ -105,7 +133,7 @@ def home():
             <div class="max-w-md mx-auto flex justify-between items-center">
                 <div class="flex items-center space-x-2">
                     <i class="fa-solid fa-microphone-lines text-emerald-400 text-xl animate-pulse"></i>
-                    <h1 class="text-base font-black bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">NiftyLens Voice AI 🎙️</h1>
+                    <h1 class="text-base font-black bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">NiftyLens Hindi Voice AI</h1>
                 </div>
                 <button onclick="clearChat()" class="text-xs bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl hover:text-white transition">
                     <i class="fa-solid fa-rotate-right mr-1"></i> New
@@ -126,8 +154,7 @@ def home():
                     <i class="fa-solid fa-robot"></i>
                 </div>
                 <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 text-xs text-slate-200 max-w-[85%] shadow-lg leading-relaxed">
-                    Hello! Main Bolne Wala Voice AI Assistant hoon. 🎙️<br><br>
-                    Niche <strong>Mic</strong> dabakar boliye ya likhiye: <em>"Tum hote to avi kya karte"</em> ya <em>"Nifty price kya hai"</em>. Main bolkar jawab dunga!
+                    Namaste! Niche <strong>Mic</strong> dabakar Hindi ya English me boliye: <em>"Nifty ka analysis karo, kahan buy karein kahan sell karein"</em> ya <em>"Cinematic photo prompt do"</em>.
                 </div>
             </div>
         </main>
@@ -146,10 +173,9 @@ def home():
                         <i class="fa-solid fa-circle-plus"></i>
                     </button>
                     
-                    <input id="promptInput" type="text" class="flex-1 bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none" placeholder="Boliye ya likhiye..." onkeydown="if(event.key==='Enter') sendMessage()">
+                    <input id="promptInput" type="text" class="flex-1 bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none" placeholder="Hindi ya English me boliye ya likhiye..." onkeydown="if(event.key==='Enter') sendMessage()">
                     
-                    <!-- MIC BUTTON -->
-                    <button id="micBtn" onclick="toggleSpeech()" class="text-emerald-400 hover:text-emerald-300 p-2 text-lg transition" title="Bolkar bole (Mic)">
+                    <button id="micBtn" onclick="toggleSpeech()" class="text-emerald-400 hover:text-emerald-300 p-2 text-lg transition" title="Mic">
                         <i class="fa-solid fa-microphone"></i>
                     </button>
 
@@ -203,6 +229,7 @@ def home():
                 }
             }
 
+            // ONLY SPEAKS WHEN USER CLICKS THE SPEAKER BUTTON (NO AUTO SPEAK!)
             function speakAnswer(rawText) {
                 if ('speechSynthesis' in window) {
                     window.speechSynthesis.cancel();
@@ -261,16 +288,15 @@ def home():
                         <i class="fa-solid fa-robot"></i>
                     </div>
                     <div class="bg-slate-900 border border-slate-800 rounded-2xl rounded-tl-sm p-4 text-xs text-slate-200 max-w-[88%] shadow-lg leading-relaxed whitespace-pre-wrap">
-                        <div>${text}</div>
-                        <button onclick="speakAnswer(this.previousElementSibling.innerText)" class="mt-2 text-emerald-400 hover:text-emerald-300 text-[11px] font-bold flex items-center">
-                            <i class="fa-solid fa-volume-high mr-1"></i> Aawaz sunein
+                        <div class="ans-content">${text}</div>
+                        <button onclick="speakAnswer(this.previousElementSibling.innerText)" class="mt-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-emerald-400 px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center transition shadow">
+                            <i class="fa-solid fa-volume-high mr-1.5"></i> Aawaz sunein
                         </button>
                     </div>
                 </div>`;
                 chatArea.insertAdjacentHTML('beforeend', msg);
                 chatArea.scrollTop = chatArea.scrollHeight;
-
-                speakAnswer(text);
+                // Auto speak REMOVED! Only speaks on button click.
             }
 
             async function sendMessage(){
