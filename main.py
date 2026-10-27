@@ -1,23 +1,122 @@
 import os
 import io
+import re
 import json
+import random
+import hashlib
 import urllib.request
+import sqlite3
 from datetime import datetime, timezone, timedelta
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 
-app = FastAPI(title="Avika.Ai - Independent AI Platform")
+app = FastAPI(title="Avika.Ai - Multi-User Platform")
+
+# PASSWORD HASHING
+def hash_pass(p: str) -> str:
+    return hashlib.sha256(p.encode()).hexdigest()
+
+# DATABASE SETUP
+def get_db():
+    conn = sqlite3.connect("users.db", timeout=15)
+    conn.execute("PRAGMA journal_mode=WAL;")
+    return conn
+
+def init_db():
+    with get_db() as conn:
+        c = conn.cursor()
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT UNIQUE,
+                name TEXT,
+                email TEXT UNIQUE,
+                phone TEXT UNIQUE,
+                password TEXT
+            )
+        """)
+        conn.commit()
+
+init_db()
 
 @app.get("/healthz")
 def healthz():
     return {"status": "ok"}
 
-# 100% INDEPENDENT AI ENGINE (GROQ + 403 BYPASS HEADERS)
+# AUTH MODELS
+class RegisterReq(BaseModel):
+    name: str
+    email: str
+    phone: str
+    password: str
+
+class LoginReq(BaseModel):
+    identifier: str
+    password: str
+
+@app.post("/api/register")
+def register(data: RegisterReq):
+    try:
+        with get_db() as conn:
+            c = conn.cursor()
+            # Generate pure numerical random 6-digit User ID (e.g. 849201)
+            random_num_id = str(random.randint(100000, 999999))
+            
+            hashed = hash_pass(data.password)
+            c.execute(
+                "INSERT INTO users (user_id, name, email, phone, password) VALUES (?, ?, ?, ?, ?)",
+                (random_num_id, data.name.strip(), data.email.strip().lower(), data.phone.strip(), hashed)
+            )
+            conn.commit()
+            return {
+                "message": "Registration successful! Ab login karein.",
+                "user": {
+                    "name": data.name.strip(),
+                    "email": data.email.strip().lower(),
+                    "phone": data.phone.strip(),
+                    "user_id": random_num_id
+                }
+            }
+    except sqlite3.IntegrityError:
+        raise HTTPException(status_code=400, detail="Yeh Email ya Mobile Number pehle se registered hai!")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+@app.post("/api/login")
+def login(data: LoginReq):
+    try:
+        ident = data.identifier.strip().lower()
+        with get_db() as conn:
+            c = conn.cursor()
+            c.execute(
+                "SELECT user_id, name, email, phone, password FROM users WHERE email=? OR phone=?",
+                (ident, data.identifier.strip())
+            )
+            user = c.fetchone()
+            
+            if not user or user[4] != hash_pass(data.password):
+                raise HTTPException(status_code=400, detail="Galat Email/Mobile ya Password!")
+            
+            return {
+                "message": "Login successful!",
+                "user": {
+                    "user_id": user[0],
+                    "name": user[1],
+                    "email": user[2],
+                    "phone": user[3]
+                }
+            }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+
+# GROQ LLM ENGINE (llama-3.1-8b-instant with Browser Headers)
 def call_avika_brain(prompt: str):
     api_key = os.environ.get("GROQ_API_KEY", "").strip()
     
-    # Accurate Indian Standard Time (IST)
     ist = timezone(timedelta(hours=5, minutes=30))
     now_ist = datetime.now(ist)
     current_date = now_ist.strftime("%d %B %Y")
@@ -25,25 +124,25 @@ def call_avika_brain(prompt: str):
     current_day = now_ist.strftime("%A")
 
     system_instruction = f"""
-    Aap Avika.Ai hain — ek independent, super-smart Indian AI Assistant aur Stock Market Technical Analyst.
+    Aap Avika.Ai hain — ek super-intelligent, helpful Indian AI Assistant aur Stock Market Analyst.
     
     Live Reality Context:
     - Current Location: India
     - Current Indian Date (IST): {current_date} ({current_day})
     - Current Indian Time (IST): {current_time}
-    - Deepawali 2026: 8 November 2026 (Sunday), Kartik Maas Amavasya.
+    - Deepawali (Diwali) 2026: 8 November 2026 (Sunday), Kartik Maas Amavasya.
     - Market Baseline: Nifty 50 (~22,750), Bank Nifty (~54,360), Sensex (~74,820), Tata Steel (~154.50).
 
     Rules:
-    1. Stock Market: User ke exact asset (Nifty, Bank Nifty, Sensex, Tata Steel, etc.) ke hisab se exact Buy Entry, Stop Loss (SL) aur Target 1 & 2 dein.
-    2. Mathematics: 2×2, 100*100, √144 ya koi bhi calculation exact karke dein.
-    3. Dates: Deepawali ya kisi bhi calendar sawal ka accurate jawab dein.
-    4. Language: User jis bhasha me puche (Hindi, Hinglish, Bengali, English), usi me natural jawab dein.
-    5. Kabhi 'I cannot provide that' na bole, direct help karein.
+    1. Agar stock market (Nifty, Bank Nifty, Sensex, Tata Steel) puche toh exact Buy Entry, Stop Loss (SL) aur Target 1 & 2 dein.
+    2. Agar maths (+, -, *, ×, /, %, √) puche: exact answer calculate karein.
+    3. Agar dates ya calendar puche: upar diye Indian date ke hisab se exact batayein.
+    4. User ki bhasha (Hindi, Hinglish, Bengali, English) me natural aur friendly jawab dein.
+    5. Kabhi 'I cannot provide that' bolkar mana na karein.
     """
 
     if not api_key:
-        return "⚠️ GROQ_API_KEY missing in Render! Please add it in Render Environment."
+        return "⚠️ GROQ_API_KEY Render par configure nahi hai! Kripya Render Environment me GROQ_API_KEY check karein."
 
     url = "https://api.groq.com/openai/v1/chat/completions"
     payload = {
@@ -56,7 +155,6 @@ def call_avika_brain(prompt: str):
         "max_tokens": 1024
     }
 
-    # PROPER BROWSER HEADERS (ELIMINATES 403 FORBIDDEN ERROR)
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -69,16 +167,8 @@ def call_avika_brain(prompt: str):
         with urllib.request.urlopen(req, timeout=12) as resp:
             data = json.loads(resp.read().decode("utf-8"))
             return data["choices"][0]["message"]["content"]
-    except Exception:
-        # Fallback to Llama 3.1 8B instant
-        try:
-            payload["model"] = "llama-3.1-8b-instant"
-            req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers)
-            with urllib.request.urlopen(req, timeout=8) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                return data["choices"][0]["message"]["content"]
-        except Exception as e:
-            return f"Error: {str(e)}"
+    except Exception as e:
+        return f"AI Error: {str(e)}"
 
 @app.post("/api/analyze")
 async def analyze(
@@ -97,7 +187,7 @@ def home():
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Avika.Ai - Independent AI</title>
+        <title>Avika.Ai - Trading & AI Terminal</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
         <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
@@ -110,7 +200,62 @@ def home():
         
         <div class="fixed top-0 left-1/4 w-96 h-96 bg-emerald-500/10 rounded-full blur-[140px] pointer-events-none"></div>
 
-        <!-- 3-LINE SIDEBAR DRAWER -->
+        <!-- AUTH SCREEN (REGISTER / LOGIN) - SHOWN FIRST TO NEW USERS -->
+        <div id="authScreen" class="fixed inset-0 bg-[#030611] z-50 flex items-center justify-center p-4 overflow-y-auto">
+            <div class="bg-slate-900/95 border border-slate-800 rounded-3xl p-6 w-full max-w-sm shadow-2xl backdrop-blur-xl my-auto">
+                
+                <div class="text-center mb-6">
+                    <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 text-2xl mb-2">
+                        <i class="fa-solid fa-sparkles"></i>
+                    </div>
+                    <h2 class="text-xl font-extrabold text-white">Avika.Ai</h2>
+                    <p class="text-xs text-slate-400 mt-1">Trading Terminal & Smart AI</p>
+                </div>
+
+                <!-- TABS (LOGIN / REGISTER) -->
+                <div class="flex border-b border-slate-800 mb-5">
+                    <button id="tabBtnLogin" onclick="switchAuthTab('login')" class="flex-1 pb-2 text-xs font-bold text-emerald-400 border-b-2 border-emerald-400">Login</button>
+                    <button id="tabBtnReg" onclick="switchAuthTab('reg')" class="flex-1 pb-2 text-xs font-semibold text-slate-400">Register</button>
+                </div>
+
+                <!-- LOGIN FORM -->
+                <div id="formLogin" class="space-y-3.5">
+                    <div>
+                        <label class="text-[11px] text-slate-400 font-medium">Email ya Mobile Number</label>
+                        <input id="lIdentifier" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 mt-1 text-xs text-white focus:border-emerald-500 focus:outline-none" placeholder="user@gmail.com ya 9876543210">
+                    </div>
+                    <div>
+                        <label class="text-[11px] text-slate-400 font-medium">Password</label>
+                        <input id="lPassword" type="password" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 mt-1 text-xs text-white focus:border-emerald-500 focus:outline-none" placeholder="••••••••">
+                    </div>
+                    <button id="btnDoLogin" onclick="handleLogin()" class="w-full mt-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black py-3 rounded-xl text-xs uppercase tracking-wider transition shadow-lg">Login Karein</button>
+                </div>
+
+                <!-- REGISTER FORM -->
+                <div id="formReg" class="space-y-3 hidden">
+                    <div>
+                        <label class="text-[11px] text-slate-400 font-medium">Aapka Pura Naam (Full Name)</label>
+                        <input id="rName" type="text" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 mt-1 text-xs text-white focus:border-emerald-500 focus:outline-none" placeholder="Rahul Sharma">
+                    </div>
+                    <div>
+                        <label class="text-[11px] text-slate-400 font-medium">Mobile Number</label>
+                        <input id="rPhone" type="tel" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 mt-1 text-xs text-white focus:border-emerald-500 focus:outline-none" placeholder="9876543210">
+                    </div>
+                    <div>
+                        <label class="text-[11px] text-slate-400 font-medium">Email Address</label>
+                        <input id="rEmail" type="email" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 mt-1 text-xs text-white focus:border-emerald-500 focus:outline-none" placeholder="user@gmail.com">
+                    </div>
+                    <div>
+                        <label class="text-[11px] text-slate-400 font-medium">Password Banayein</label>
+                        <input id="rPassword" type="password" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 mt-1 text-xs text-white focus:border-emerald-500 focus:outline-none" placeholder="••••••••">
+                    </div>
+                    <button id="btnDoReg" onclick="handleRegister()" class="w-full mt-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-black py-3 rounded-xl text-xs uppercase tracking-wider transition shadow-lg">Register Karein</button>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 3-LINE SIDEBAR DRAWER (SHOWS LOGGED-IN USER'S OWN DETAILS) -->
         <div id="drawerOverlay" onclick="toggleMenu()" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-40 hidden transition-opacity"></div>
         <div id="sidebarDrawer" class="fixed top-0 left-0 h-full w-80 bg-slate-900/98 border-r border-slate-800 p-5 z-50 transform -translate-x-full transition-transform duration-300 flex flex-col justify-between shadow-2xl backdrop-blur-xl overflow-y-auto">
             <div>
@@ -122,35 +267,43 @@ def home():
                     <button onclick="toggleMenu()" class="text-slate-400 hover:text-white text-lg"><i class="fa-solid fa-xmark"></i></button>
                 </div>
 
-                <div class="mt-4 p-3.5 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-1 shadow-inner">
-                    <span class="text-[10px] text-slate-400 uppercase tracking-widest font-bold">User Profile</span>
-                    <p class="text-xs font-mono font-bold text-white">ID: <span class="text-emerald-400 font-extrabold">NL-PRO-01</span></p>
-                    <p class="text-[11px] text-slate-300 truncate">sinu11915@gmail.com</p>
-                    <p class="text-[11px] text-slate-400">Mob: +91 6290565859</p>
+                <!-- USER PROFILE CARD (DYNAMICALLY FILLED) -->
+                <div class="mt-4 p-4 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-1.5 shadow-inner">
+                    <div class="flex justify-between items-center">
+                        <span class="text-[10px] text-slate-400 uppercase tracking-widest font-bold">Account Profile</span>
+                        <span class="text-[9px] bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full font-bold">Online</span>
+                    </div>
+                    <p id="profName" class="text-sm font-bold text-white truncate">-</p>
+                    <p class="text-xs font-mono text-slate-300">User ID: <span id="profUserId" class="text-emerald-400 font-extrabold tracking-wider">000000</span></p>
+                    <p id="profEmail" class="text-[11px] text-slate-400 truncate mt-0.5">-</p>
+                    <p id="profPhone" class="text-[11px] text-slate-400">-</p>
                 </div>
 
+                <!-- MENU LIST -->
                 <div class="mt-4 space-y-2 text-xs font-semibold">
                     <button onclick="alert('Wallet Balance: ₹0.00')" class="w-full flex items-center justify-between p-3 bg-slate-950/60 hover:bg-slate-800 rounded-xl border border-slate-800 text-slate-200">
                         <div class="flex items-center space-x-2.5"><i class="fa-solid fa-wallet text-violet-400"></i><span>Wallet & Recharge</span></div>
                         <span class="text-[10px] bg-violet-500/20 text-violet-300 px-2 py-0.5 rounded-lg">₹0.00</span>
                     </button>
-                    <button onclick="alert('VIP Pro Activated!')" class="w-full flex items-center justify-between p-3 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 rounded-xl border border-amber-500/30 text-amber-300">
+                    <button onclick="alert('Pro Membership activated for testing!')" class="w-full flex items-center justify-between p-3 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 rounded-xl border border-amber-500/30 text-amber-300">
                         <div class="flex items-center space-x-2.5"><i class="fa-solid fa-crown text-amber-400"></i><span>Upgrade Pro (₹29)</span></div>
                         <span class="text-[9px] bg-amber-500/30 text-amber-200 px-1.5 py-0.5 rounded-md font-bold">VIP</span>
                     </button>
-                    <button onclick="alert('Support Ticket: #AVK-9901 (Processing)'); toggleMenu()" class="w-full flex items-center space-x-2.5 p-3 bg-slate-950/60 hover:bg-slate-800 rounded-xl border border-slate-800 text-slate-200">
+                    <button onclick="alert('Support Bot Active: Ticket Created'); toggleMenu()" class="w-full flex items-center space-x-2.5 p-3 bg-slate-950/60 hover:bg-slate-800 rounded-xl border border-slate-800 text-slate-200">
                         <i class="fa-solid fa-headset text-emerald-400"></i><span>Customer Support</span>
                     </button>
                 </div>
             </div>
 
-            <button onclick="alert('Logged out!')" class="w-full mt-4 flex items-center justify-center space-x-2 p-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl text-xs font-bold">
-                <i class="fa-solid fa-arrow-right-from-bracket"></i><span>Logout</span>
+            <!-- LOGOUT -->
+            <button onclick="handleLogout()" class="w-full mt-4 flex items-center justify-center space-x-2 p-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 rounded-xl text-xs font-bold transition">
+                <i class="fa-solid fa-arrow-right-from-bracket"></i>
+                <span>Logout Account</span>
             </button>
         </div>
 
-        <!-- HEADER -->
-        <header class="sticky top-0 z-30 bg-[#070b16]/95 backdrop-blur-xl border-b border-slate-800/80 px-4 py-2.5">
+        <!-- TOP HEADER -->
+        <header id="mainHeader" class="sticky top-0 z-30 bg-[#070b16]/95 backdrop-blur-xl border-b border-slate-800/80 px-4 py-2.5 hidden">
             <div class="max-w-md mx-auto flex justify-between items-center">
                 <div class="flex items-center space-x-2.5">
                     <button onclick="toggleMenu()" class="text-slate-300 hover:text-emerald-400 text-lg p-2 rounded-xl bg-slate-900 border border-slate-800 shadow">
@@ -173,8 +326,8 @@ def home():
             </div>
         </header>
 
-        <!-- MAIN TABS CONTENT -->
-        <main class="flex-1 max-w-md w-full mx-auto p-4 pb-28 overflow-y-auto">
+        <!-- MAIN SCREENS (TABS) -->
+        <main id="mainContent" class="flex-1 max-w-md w-full mx-auto p-4 pb-28 overflow-y-auto hidden">
             
             <!-- TAB 1: HOME PAGE -->
             <section id="secHome" class="space-y-4">
@@ -212,18 +365,18 @@ def home():
                 <div class="p-4 bg-slate-900/80 border border-slate-800 rounded-3xl flex justify-between items-center">
                     <div>
                         <h4 class="text-xs font-bold text-white">Live Candlestick Charts</h4>
-                        <p class="text-[11px] text-slate-400">TradingView indicators & Fullscreen</p>
+                        <p class="text-[11px] text-slate-400">All Indian Stocks, Indicators & Fullscreen</p>
                     </div>
                     <button onclick="switchTab('charts', 'NSE:NIFTY')" class="bg-emerald-500 text-slate-950 font-bold text-xs px-3 py-2 rounded-xl">Open Charts 📈</button>
                 </div>
             </section>
 
-            <!-- TAB 2: AI CHAT (POWERED BY GROQ WITH NO 403) -->
+            <!-- TAB 2: AI CHAT (GROQ REAL AI) -->
             <section id="secChat" class="hidden space-y-4">
                 <div class="p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-start space-x-2">
                     <i class="fa-solid fa-bolt text-amber-400 text-xs mt-0.5"></i>
                     <p class="text-[10px] text-amber-200/90 leading-tight">
-                        <strong>Avika AI:</strong> Deepawali kab hai, Sensex/Nifty prediction, ya koi bhi sawal puchiye!
+                        <strong>Avika AI:</strong> Sensex, Nifty, Deepawali date, ya koi bhi sawal puchiye!
                     </p>
                 </div>
                 <div id="chatFeed" class="space-y-3">
@@ -233,7 +386,7 @@ def home():
                         </div>
                         <div class="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 text-xs text-slate-200 max-w-[85%] shadow-lg leading-relaxed">
                             Hello! Main **Avika.Ai** hoon. 💬<br>
-                            Deepawali date, Nifty kal open hote hi kya karein, Sensex levels, ya koi bhi sawal puchiye!
+                            SENSEX, NIFTY prediction, Maths, Dates ya koi bhi sawal poochiye!
                         </div>
                     </div>
                 </div>
@@ -272,7 +425,7 @@ def home():
         <!-- CHAT INPUT BAR -->
         <div id="chatControls" class="hidden fixed bottom-14 left-0 right-0 max-w-md mx-auto p-2.5 bg-[#070b16]/95 backdrop-blur-xl border-t border-slate-800/80 z-20">
             <div class="flex items-center space-x-2 bg-slate-900 border border-slate-800 rounded-2xl p-1.5 px-3 focus-within:border-emerald-500 transition">
-                <input id="promptInput" type="text" class="flex-1 bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none" placeholder="Deepawali kab hai, Sensex, Nifty kal khulte hi..." onkeydown="if(event.key==='Enter') sendChat()">
+                <input id="promptInput" type="text" class="flex-1 bg-transparent text-xs text-white placeholder-slate-500 focus:outline-none" placeholder="Sensex, Nifty buy/sell, 2×2, date..." onkeydown="if(event.key==='Enter') sendChat()">
                 <button id="micBtn" onclick="toggleSpeech()" class="text-emerald-400 hover:text-emerald-300 p-2 text-base transition">
                     <i class="fa-solid fa-microphone"></i>
                 </button>
@@ -283,7 +436,7 @@ def home():
         </div>
 
         <!-- BOTTOM NAVIGATION TABS -->
-        <nav class="fixed bottom-0 left-0 right-0 z-30 bg-[#070b16] border-t border-slate-800 px-6 py-2">
+        <nav id="bottomNav" class="fixed bottom-0 left-0 right-0 z-30 bg-[#070b16] border-t border-slate-800 px-6 py-2 hidden">
             <div class="max-w-md mx-auto flex justify-between items-center text-center">
                 <button id="navHome" onclick="switchTab('home')" class="flex flex-col items-center text-emerald-400 transition">
                     <i class="fa-solid fa-house text-base"></i>
@@ -306,11 +459,128 @@ def home():
             let recognition = null;
             let currentUtterance = null;
 
+            // AUTH STATE CHECK
+            function checkAuthState() {
+                const rawUser = localStorage.getItem('avika_user');
+                if (rawUser) {
+                    const u = JSON.parse(rawUser);
+                    document.getElementById('authScreen').classList.add('hidden');
+                    document.getElementById('mainHeader').classList.remove('hidden');
+                    document.getElementById('mainContent').classList.remove('hidden');
+                    document.getElementById('bottomNav').classList.remove('hidden');
+
+                    // Populate drawer with user's own details
+                    document.getElementById('profName').innerText = u.name || 'User';
+                    document.getElementById('profUserId').innerText = u.user_id || '000000';
+                    document.getElementById('profEmail').innerText = u.email || '-';
+                    document.getElementById('profPhone').innerText = 'Mob: +91 ' + (u.phone || '-');
+                } else {
+                    document.getElementById('authScreen').classList.remove('hidden');
+                    document.getElementById('mainHeader').classList.add('hidden');
+                    document.getElementById('mainContent').classList.add('hidden');
+                    document.getElementById('bottomNav').classList.add('hidden');
+                }
+            }
+
+            function switchAuthTab(tab) {
+                if (tab === 'login') {
+                    document.getElementById('formLogin').classList.remove('hidden');
+                    document.getElementById('formReg').classList.add('hidden');
+                    document.getElementById('tabBtnLogin').className = "flex-1 pb-2 text-xs font-bold text-emerald-400 border-b-2 border-emerald-400";
+                    document.getElementById('tabBtnReg').className = "flex-1 pb-2 text-xs font-semibold text-slate-400";
+                } else {
+                    document.getElementById('formLogin').classList.add('hidden');
+                    document.getElementById('formReg').classList.remove('hidden');
+                    document.getElementById('tabBtnReg').className = "flex-1 pb-2 text-xs font-bold text-emerald-400 border-b-2 border-emerald-400";
+                    document.getElementById('tabBtnLogin').className = "flex-1 pb-2 text-xs font-semibold text-slate-400";
+                }
+            }
+
+            async function handleRegister() {
+                const name = document.getElementById('rName').value.trim();
+                const phone = document.getElementById('rPhone').value.trim();
+                const email = document.getElementById('rEmail').value.trim();
+                const password = document.getElementById('rPassword').value.trim();
+
+                if (!name || !phone || !email || !password) {
+                    return alert("Sabhi details bharna zaroori hai!");
+                }
+
+                const btn = document.getElementById('btnDoReg');
+                btn.disabled = true;
+                btn.innerText = "Registering...";
+
+                try {
+                    const res = await fetch('/api/register', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ name, email, phone, password })
+                    });
+                    const d = await res.json();
+                    if (res.ok) {
+                        alert(d.message + " Aapka Random User ID hai: " + d.user.user_id);
+                        localStorage.setItem('avika_user', JSON.stringify(d.user));
+                        checkAuthState();
+                    } else {
+                        alert(d.detail || "Registration failed!");
+                    }
+                } catch (e) {
+                    alert("Network error: " + e.message);
+                } finally {
+                    btn.disabled = false;
+                    btn.innerText = "Register Karein";
+                }
+            }
+
+            async function handleLogin() {
+                const identifier = document.getElementById('lIdentifier').value.trim();
+                const password = document.getElementById('lPassword').value.trim();
+
+                if (!identifier || !password) {
+                    return alert("Email/Mobile aur Password bharein!");
+                }
+
+                const btn = document.getElementById('btnDoLogin');
+                btn.disabled = true;
+                btn.innerText = "Logging in...";
+
+                try {
+                    const res = await fetch('/api/login', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ identifier, password })
+                    });
+                    const d = await res.json();
+                    if (res.ok) {
+                        localStorage.setItem('avika_user', JSON.stringify(d.user));
+                        checkAuthState();
+                    } else {
+                        alert(d.detail || "Login failed!");
+                    }
+                } catch (e) {
+                    alert("Network error: " + e.message);
+                } finally {
+                    btn.disabled = false;
+                    btn.innerText = "Login Karein";
+                }
+            }
+
+            function handleLogout() {
+                localStorage.removeItem('avika_user');
+                toggleMenu();
+                checkAuthState();
+            }
+
             function toggleMenu(){
                 const drawer = document.getElementById('sidebarDrawer');
                 const overlay = document.getElementById('drawerOverlay');
                 drawer.classList.toggle('-translate-x-full');
                 overlay.classList.toggle('hidden');
+            }
+
+            function toggleModal(id){
+                const m = document.getElementById(id);
+                if (m) m.classList.toggle('hidden');
             }
 
             function toggleFullScreen(){
@@ -450,6 +720,9 @@ def home():
                     alert("Error: " + e.message);
                 }
             }
+
+            // ON PAGE LOAD CHECK AUTH
+            checkAuthState();
         </script>
     </body>
     </html>
