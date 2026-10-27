@@ -47,7 +47,7 @@ def call_avika_brain(prompt: str):
 
     url = "https://api.groq.com/openai/v1/chat/completions"
     payload = {
-        "model": "llama-3.3-70b-versatile",
+        "model": "llama-3.1-8b-instant",
         "messages": [
             {"role": "system", "content": system_instruction},
             {"role": "user", "content": prompt}
